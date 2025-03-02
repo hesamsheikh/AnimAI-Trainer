@@ -6,3 +6,5 @@ __pycache__
 *.pyw
 *.pyz
 media
+test.py 
+animai_trainer.egg-info
