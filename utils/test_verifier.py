@@ -1,4 +1,4 @@
-from utils.verifier import syntax_checker
+from verifier import syntax_checker
 
 # Example of valid Manim code
 valid_code = """
