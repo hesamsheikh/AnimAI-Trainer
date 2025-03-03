@@ -7,6 +7,8 @@ import subprocess
 import shutil
 import functools
 from pathlib import Path
+from bounding_box import create_bounding_box, get_bounding_box
+
 
 # Quick pre-checks before running expensive Manim validation
 def quick_syntax_check(code_string):
@@ -110,3 +112,13 @@ def syntax_checker(code_string):
             return False, f"Error during compilation check: {str(e)}"
     
     return True, ""
+
+
+def overlap_checker(code_string):
+    """
+    Check if the code contains any overlapping objects
+    """
+    pass
+    
+
+
