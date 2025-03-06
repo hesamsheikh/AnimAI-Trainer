@@ -90,7 +90,8 @@ def syntax_checker(code_string):
                 "--disable_caching",
                 "--format=png",
                 "--quality=l",  # Use low quality for faster processing
-                "--verbosity=ERROR"
+                "--verbosity=ERROR",
+                "--fps=1"  # Set fps to 1 for faster verification
             ]
             
             # Capture output and errors

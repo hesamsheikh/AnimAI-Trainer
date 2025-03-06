@@ -1,6 +1,6 @@
 from manim import *
 import numpy as np
-from utils.bounding_box import create_bounding_box, get_bounding_box, check_mobject_overlap
+from bounding_box import create_bounding_box, check_mobject_overlap
 
 class CosineDerivative(Scene):
     def construct(self):
@@ -101,7 +101,7 @@ class CosineDerivative(Scene):
         
         self.wait(2)
 
-
+from manim.opengl import *
 # Example usage
 class OverlapExampleScene(Scene):
     def construct(self):
@@ -150,3 +150,6 @@ class OverlapExampleScene(Scene):
         )
         
         self.wait(1)
+
+example = OverlapExampleScene()
+example.construct()
