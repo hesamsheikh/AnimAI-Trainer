@@ -2,6 +2,7 @@ from manim import *
 import numpy as np
 from bounding_box import create_bounding_box, check_mobject_overlap
 
+
 class CosineDerivative(Scene):
     def construct(self):
         # Set up the axes
@@ -101,7 +102,6 @@ class CosineDerivative(Scene):
         
         self.wait(2)
 
-from manim.opengl import *
 # Example usage
 class OverlapExampleScene(Scene):
     def construct(self):
@@ -151,5 +151,46 @@ class OverlapExampleScene(Scene):
         
         self.wait(1)
 
-example = OverlapExampleScene()
-example.construct()
+# with tempconfig({
+#     "quality": "low_quality", 
+#     "frame_rate": 1, 
+#     "preview": False, 
+#     "format": "png",
+#     "disable_caching": True, 
+#     "write_to_movie": False, 
+#     "save_last_frame": False,
+#     "verbosity": "ERROR"
+#     }):
+#     scene = OverlapExampleScene()
+#     scene.render()
+
+#     # Run the OverlapExampleScene using the run_manim_code function
+
+
+from utils import run_manim_code
+
+# Get the code for OverlapExampleScene as a string
+import inspect
+scene_code = inspect.getsource(OverlapExampleScene)
+
+# Add necessary imports to the code string
+code_to_run = """
+from manim import *
+import numpy as np
+from bounding_box import create_bounding_box, check_mobject_overlap
+
+
+""" + scene_code
+# Execute the scene code and measure execution time
+import time
+start_time = time.time()
+success, output, error = run_manim_code(code_to_run)
+end_time = time.time()
+execution_time = end_time - start_time
+
+
+if success:
+    print(f"Scene rendered successfully in {execution_time:.2f} seconds!")
+else:
+    print(f"Error rendering scene: {error}")
+    print(f"Failed after {execution_time:.2f} seconds")
