@@ -1,4 +1,7 @@
-from manim import Rectangle, VGroup, RED, Mobject
+from manim import Rectangle, VGroup, RED, Mobject 
+from manim import Text, MathTex, Tex, SingleStringMathTex
+import inspect
+
 
 # Helper function for creating bounding boxes
 def create_bounding_box(obj, color=RED):
@@ -63,7 +66,7 @@ def if_box_overlap(bbox1, bbox2):
     
     return False
 
-def check_mobject_overlap(mobject1: Mobject, mobject2: Mobject):
+def check_two_mobjects_overlap(mobject1: Mobject, mobject2: Mobject):
     """
     Check if two Manim mobjects overlap using their bounding boxes.
     
@@ -80,3 +83,62 @@ def check_mobject_overlap(mobject1: Mobject, mobject2: Mobject):
     
     # Check for overlap
     return if_box_overlap(bbox1, bbox2)
+
+
+def get_mobject_name(mobject, frame=None):
+    """
+    Dynamically find the variable name of a mobject by inspecting the caller's scope.
+    
+    Args:
+        mobject: The mobject to find the name for
+        frame: Optional frame to inspect (defaults to caller's frame)
+        
+    Returns:
+        str: The variable name, or repr(mobject) if name not found
+    """
+    if frame is None:
+        # Get the caller's frame (skip this function's frame)
+        frame = inspect.currentframe().f_back
+    
+    # Look through local and global variables
+    for name, obj in frame.f_locals.items():
+        if obj is mobject:  # Use 'is' for identity comparison
+            return name
+            
+    for name, obj in frame.f_globals.items():
+        if obj is mobject:
+            return name
+    
+    # If we can't find the name, return None
+    return None
+
+
+def check_mobject_overlaps(scene):
+    """
+    Check for overlaps between all pairs of mobjects in a list.
+    
+    Args:
+        mobjects (list): List of Manim mobjects to check for overlaps
+        
+    Returns:
+        list: List of tuples containing pairs of overlapping mobjects
+    """
+    overlapping_pairs = []
+
+    # Get the caller's frame for variable name lookup
+    caller_frame = inspect.currentframe().f_back
+    
+    mobjects = scene.mobjects
+    # Check all possible pairs, but only for text-like mobjects
+    for i in range(len(mobjects)):
+        # Skip if not a text-like or group mobject
+        if not isinstance(mobjects[i], (Text, MathTex, Tex, SingleStringMathTex, VGroup)):
+            continue
+
+        for j in range(i + 1, len(mobjects)):
+            if check_two_mobjects_overlap(mobjects[i], mobjects[j]):
+                name_i = get_mobject_name(mobjects[i], caller_frame)
+                name_j = get_mobject_name(mobjects[j], caller_frame)
+                if name_i and name_j:
+                    overlapping_pairs.append((name_i, name_j))
+    return overlapping_pairs

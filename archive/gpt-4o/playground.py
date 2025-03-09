@@ -1,6 +1,6 @@
 from manim import *
 import numpy as np
-from bounding_box import create_bounding_box, check_mobject_overlap
+from bounding_box import create_bounding_box, check_two_mobjects_overlap, check_mobject_overlaps
 
 
 class CosineDerivative(Scene):
@@ -64,7 +64,7 @@ class CosineDerivative(Scene):
         
         for i in range(len(objects)):
             for j in range(i+1, len(objects)):
-                if check_mobject_overlap(objects[i], objects[j]):
+                if check_two_mobjects_overlap(objects[i], objects[j]):
                     overlap_detected = True
                     if overlap_message:
                         overlap_message += ", "
@@ -123,21 +123,11 @@ class OverlapExampleScene(Scene):
         status_text = Text("No overlap detected", color=GREEN).scale(0.7)
         status_text.to_edge(DOWN)
         
-        # Check for overlaps initially
-        if check_mobject_overlap(circle, text):
-            status_text.become(Text("Objects are overlapping!", color=YELLOW).scale(0.7).to_edge(DOWN))
-        
         self.play(FadeIn(status_text))
         self.wait(1)
         
         # Gradually move circle toward text to demonstrate overlap detection
         self.play(circle_group.animate.shift(RIGHT*3), run_time=3)
-        
-        # Check for overlaps after animation and update the text
-        if check_mobject_overlap(circle, text):
-            status_text.become(Text("Objects are overlapping!", color=YELLOW).scale(0.7).to_edge(DOWN))
-        else:
-            status_text.become(Text("No overlap detected", color=GREEN).scale(0.7).to_edge(DOWN))
         
         self.wait(1)
         self.play(FadeOut(status_text))
@@ -151,43 +141,18 @@ class OverlapExampleScene(Scene):
         
         self.wait(1)
 
-# with tempconfig({
-#     "quality": "low_quality", 
-#     "frame_rate": 1, 
-#     "preview": False, 
-#     "format": "png",
-#     "disable_caching": True, 
-#     "write_to_movie": False, 
-#     "save_last_frame": False,
-#     "verbosity": "ERROR"
-#     }):
-#     scene = OverlapExampleScene()
-#     scene.render()
-
-#     # Run the OverlapExampleScene using the run_manim_code function
 
 
 from utils import run_manim_code
-
-# Get the code for OverlapExampleScene as a string
 import inspect
+import time
+
 scene_code = inspect.getsource(OverlapExampleScene)
 
-# Add necessary imports to the code string
-code_to_run = """
-from manim import *
-import numpy as np
-from bounding_box import create_bounding_box, check_mobject_overlap
-
-
-""" + scene_code
-# Execute the scene code and measure execution time
-import time
 start_time = time.time()
-success, output, error = run_manim_code(code_to_run)
+success, output, error, result = run_manim_code(scene_code, save_code_py=True)
 end_time = time.time()
 execution_time = end_time - start_time
-
 
 if success:
     print(f"Scene rendered successfully in {execution_time:.2f} seconds!")

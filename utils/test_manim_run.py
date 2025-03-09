@@ -2,7 +2,7 @@ import time
 import os
 
 # Import from utils directly since it's at the project root level
-from verifier import syntax_checker
+from code_utils import eval_manim_code
 
 # Example of valid Manim code
 valid_code = """
@@ -58,11 +58,11 @@ from manim import * class MyScene(Scene): def construct(self): polygon = Regular
 
 def test_code(description, code):
     print(f"Testing {description}:")
-    is_valid, error_message = syntax_checker(code)
+    is_valid, details = eval_manim_code(code)
     print(f"Valid: {is_valid}")
     if not is_valid:
         # Print only first 30 characters of error message
-        truncated_error = error_message[:30] + "..." if len(error_message) > 30 else error_message
+        truncated_error = details['error'][:30] + "..." if len(details['error']) > 30 else details['error']
         print(f"Error: {truncated_error}")
     print()
 
