@@ -12,7 +12,8 @@ In this repository, we will be handling the data processing, and the model train
 
 ## Plan of Attack (Not definitive)
 
-- ✅ Design verifiers (reward functions) for a given manim code.
+- ✅ Run manim code string and get the output.
+- ✅ Implement a verfier to check for object overlap.
 - Process open source manim datasets from Hugging Face, and prepare them for training.
 - Train the model.
 - Release the model.
