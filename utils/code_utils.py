@@ -14,7 +14,7 @@ def add_necessary_imports(code_string):
     required_imports = [
         "from manim import *",
         "import numpy as np",
-        "from bounding_box import create_bounding_box, check_mobject_overlaps"
+        "from utils.bounding_box import create_bounding_box, check_mobject_overlaps"
     ]
     
     existing_imports = [line.strip() for line in code_string.split('\n') if line.strip().startswith(('import', 'from'))]
@@ -35,11 +35,14 @@ def inject_overlap_check(code_string):
     lines = code_string.split('\n')
     modified_lines = []
     i = 0
+    line_number = 0  # Track actual line numbers
+
     
     while i < len(lines):
         line = lines[i]
         modified_lines.append(line)
-        
+        line_number += 1
+
         # Functions that we don't want to check for overlaps after
         ignore_functions = ['FadeOut']
         
@@ -51,6 +54,7 @@ def inject_overlap_check(code_string):
             
             while open_parens > 0 and next_i < len(lines):
                 modified_lines.append(lines[next_i])
+                line_number += 1
                 open_parens += lines[next_i].count('(') - lines[next_i].count(')')
                 i = next_i
                 next_i += 1
@@ -61,11 +65,14 @@ def inject_overlap_check(code_string):
             
             # Add a blank line before overlap check
             modified_lines.append("")
-            # Add the overlap check with proper indentation
+            # Add the overlap check with proper indentation and line number capture
             modified_lines.append(f"{indent}self.overlap_objects = check_mobject_overlaps(self)")
-            modified_lines.append(f"{indent}if self.overlap_objects: return")
+            modified_lines.append(f"{indent}if self.overlap_objects:")
+            modified_lines.append(f"{indent}    self.overlap_line = {line_number}")  # Store line number
+            modified_lines.append(f"{indent}    return")
             # Add a blank line after overlap check
             modified_lines.append("")
+            line_number += 6  # Account for the added lines
         
         i += 1
     
@@ -160,16 +167,14 @@ def add_tempconfig(code_string):
 
 def add_result_return(code_string):
     """
-    Adds a line to store the overlap_objects result in return_dict.
-    
-    Args:
-        code_string (str): Original Manim code string
-        
-    Returns:
-        str: Code string with result return line added
+    Adds lines to store both overlap_objects and overlap_line in return_dict.
     """
-    return_line = "\n# Store the result in the provided _return_dict\nreturn_dict['result'] = getattr(scene, 'overlap_objects', None)\n"
-    return code_string + return_line
+    return_lines = """
+    # Store the results in the provided return_dict
+    return_dict['result'] = getattr(scene, 'overlap_objects', None)
+    return_dict['line_number'] = getattr(scene, 'overlap_line', None)
+    """
+    return code_string + return_lines
 
 def process_manim_code(code_string):
     """
@@ -187,8 +192,8 @@ def process_manim_code(code_string):
         str: Processed Manim code string
     """
     code_string = add_necessary_imports(code_string)
-    code_string = inject_overlap_check(code_string)
     code_string = remove_wait_calls(code_string)
+    code_string = inject_overlap_check(code_string)
     code_string = add_tempconfig(code_string)
     if not code_string: return False
     code_string = add_result_return(code_string)
@@ -237,9 +242,9 @@ def run_manim_code(code_string, save_code_py=False):
             temp_dir = 'temp'
             os.makedirs(temp_dir, exist_ok=True)
             
-            # Save code to file
+            # Save code to file with UTF-8 encoding
             temp_file = os.path.join(temp_dir, 'manim_scene.py')
-            with open(temp_file, 'w') as f:
+            with open(temp_file, 'w', encoding='utf-8') as f:
                 f.write(code_string)
         
         # Create a dictionary that will be used to return values
@@ -250,9 +255,6 @@ def run_manim_code(code_string, save_code_py=False):
         
         # Execute the code
         exec(compiled_code, globals_dict)
-
-        # Get the result from the return dictionary
-        overlap_result = globals_dict['return_dict'].get('result')
         
     except Exception as e:
         success = False
@@ -262,7 +264,16 @@ def run_manim_code(code_string, save_code_py=False):
         # Get the output
         output = stdout_buffer.getvalue()
         log = stderr_buffer.getvalue()
-        
+
+        # Get the result from the return dictionary
+        overlap_result = globals_dict['return_dict'].get('result')
+        line_number = globals_dict['return_dict'].get('line_number')
+
+        # Get the last two lines before the overlap line number
+        if line_number:
+            code_lines = code_string.split('\n')
+            context_lines = code_lines[max(0, line_number-2):line_number]
+
         # Restore original stdout and stderr
         sys.stdout = original_stdout
         sys.stderr = original_stderr
@@ -270,8 +281,14 @@ def run_manim_code(code_string, save_code_py=False):
         # Close the buffers
         stdout_buffer.close()
         stderr_buffer.close()
-    
-    return success, output, log, overlap_result
+
+    return success, {
+        'output': output,
+        'log': log,
+        'overlap_result': overlap_result,
+        'line_number': line_number,
+        'context_lines': context_lines
+    }
 
 # Quick pre-checks before running expensive Manim validation
 def quick_syntax_check(code_string):
@@ -311,6 +328,6 @@ def eval_manim_code(code_string):
         return False, {"error": quick_error, "result": None}
 
     # Run the code through code_utils
-    success, output, log, result = run_manim_code(code_string, save_code_py=False)
+    success, details = run_manim_code(code_string, save_code_py=False)
     
-    return success, {"log": log, "result": result}
+    return success, details
