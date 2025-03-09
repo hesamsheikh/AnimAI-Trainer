@@ -1,6 +1,14 @@
-# AnimAI-Trainer
 <div align="center">
   <img src="assets/header.png" alt="AnimAI-Trainer Logo">
+  <h1 align="center">AnimAI-Trainer</h1>
+</div>
+
+<div align="center">
+Train an LLM to generate cracked Manim animations for mathematical concepts.
+  
+  [![GitHub stars](https://img.shields.io/github/stars/hesamsheikh/AnimAI-Trainer?style=social)](https://github.com/hesamsheikh/AnimAI-Trainer/stargazers)
+  [![Twitter Follow](https://img.shields.io/twitter/follow/Hesamation?style=social)](https://twitter.com/Hesamation)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 </div>
 
 
