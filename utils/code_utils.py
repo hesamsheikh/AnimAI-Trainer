@@ -102,7 +102,8 @@ def get_tempconfig_settings():
         "disable_caching": True,
         "write_to_movie": False,
         "save_last_frame": False,
-        "verbosity": "ERROR"
+        "verbosity": "ERROR",
+        # "dry_run": True,
     }
 
 def find_scene_class_name(code_string):
