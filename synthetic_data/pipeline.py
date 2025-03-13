@@ -6,7 +6,7 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.code_utils import eval_manim_code
 from dotenv import load_dotenv
-from prompts.example_scene_script import example_scene_script
+from prompts import example_scene_script
 
 
 def extract_code(response):

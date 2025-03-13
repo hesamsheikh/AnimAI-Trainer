@@ -97,12 +97,12 @@ def remove_wait_calls(code_string):
 def get_tempconfig_settings():
     """Returns the default tempconfig settings as a dictionary"""
     return {
-        "quality": "low_quality",
+        "quality": "medium_quality",
         "frame_rate": 1,
         "preview": False,
         "format": "png",
-        "disable_caching": True,
-        "write_to_movie": False,
+        "disable_caching": False,
+        "write_to_movie": True,
         "save_last_frame": False,
         "verbosity": "ERROR",
         # "dry_run": True,
