@@ -6,6 +6,8 @@ import os, sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.code_utils import eval_manim_code
 from dotenv import load_dotenv
+from prompts.example_scene_script import example_scene_script
+
 
 def extract_code(response):
     """Extract code between ```python and ``` tags"""
@@ -59,7 +61,10 @@ def run_pipeline(user_prompt):
 
     # Generate initial scene script
     print("\nGenerating scene script...")
-    scene_script = scene_scriptor(user_prompt)
+    # scene_script = scene_scriptor(user_prompt)
+    scene_script = example_scene_script
+
+
     print("\nScene script generated.")
 
     iteration = 0
