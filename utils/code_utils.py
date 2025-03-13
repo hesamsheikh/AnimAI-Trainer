@@ -6,6 +6,8 @@ from textwrap import dedent
 import ast
 import sys
 import functools
+import traceback
+
 
 def add_necessary_imports(code_string):
     """
@@ -171,10 +173,10 @@ def add_result_return(code_string):
     Adds lines to store both overlap_objects and overlap_line in return_dict.
     """
     return_lines = """
-    # Store the results in the provided return_dict
-    return_dict['result'] = getattr(scene, 'overlap_objects', None)
-    return_dict['line_number'] = getattr(scene, 'overlap_line', None)
-    """
+# Store the results in the provided return_dict
+return_dict['result'] = getattr(scene, 'overlap_objects', None)
+return_dict['line_number'] = getattr(scene, 'overlap_line', None)
+"""
     return code_string + return_lines
 
 def process_manim_code(code_string):
@@ -232,8 +234,7 @@ def run_manim_code(code_string, save_code_py=False):
     try:
         # Process the code string
         code_string = process_manim_code(code_string)
-        if not code_string: return False, "", 
-        "manim code processing failed, code likely has errors", None
+        if not code_string: return False, "", "manim code processing failed, code likely has errors", None
         
         # Save processed code if requested
         if save_code_py:
@@ -257,9 +258,40 @@ def run_manim_code(code_string, save_code_py=False):
         # Execute the code
         exec(compiled_code, globals_dict)
         
+    except SyntaxError as e:
+        # For syntax errors, format a clear error message with line number
+        error_class = e.__class__.__name__
+        line_number = e.lineno
+        error_message = str(e)
+        
+        # Format the error message with line information
+        full_error = f"{error_class} at line {line_number}: {error_message}\n"
+        
+        # Add the problematic line if available
+        if hasattr(e, 'text') and e.text:
+            full_error += f"Line content: {e.text.strip()}\n"
+            if hasattr(e, 'offset') and e.offset:
+                # Add a pointer to the error position
+                full_error += " " * (e.offset - 1) + "^\n"
+        
+        return False, {'error': full_error, 'error_type': 'syntax'}
+        
     except Exception as e:
-        success = False
-        print(f"Error executing Manim code: {str(e)}")
+        # For runtime errors, capture the full traceback
+        error_class = e.__class__.__name__
+        
+        # Capture the full traceback
+        exc_type, exc_value, exc_traceback = sys.exc_info()
+        
+        # Format the traceback into a string
+        tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+        full_traceback = ''.join(tb_lines)
+        
+        # Create a more readable error message
+        error_message = str(e)
+        full_error = f"{error_class}: {error_message}\n\nFull traceback:\n{full_traceback}"
+        
+        return False, {'error': full_error, 'error_type': 'runtime'}
     
     finally:
         # Get the output
@@ -309,8 +341,8 @@ def quick_syntax_check(code_string):
     
     return True, ""
 
-@functools.lru_cache(maxsize=256)
-def eval_manim_code(code_string):
+# @functools.lru_cache(maxsize=256)
+def eval_manim_code(code_string, save_code_py=False):
     """
     Verifies the syntax and renderability of Manim code by running it
     
@@ -329,6 +361,6 @@ def eval_manim_code(code_string):
         return False, {"error": quick_error, "result": None}
 
     # Run the code through code_utils
-    success, details = run_manim_code(code_string, save_code_py=False)
+    success, details = run_manim_code(code_string, save_code_py=save_code_py)
     
     return success, details

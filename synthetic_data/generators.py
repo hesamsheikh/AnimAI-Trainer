@@ -36,6 +36,7 @@ class Generator:
         self.api_type = api_type.lower()
         self.base_url = base_url
         self.stream = stream
+        self.conversation_history = []
         
         # Initialize the appropriate client
         if self.api_type == "openai":
@@ -45,7 +46,11 @@ class Generator:
         else:
             raise ValueError(f"Unsupported API type: {api_type}. Use 'openai' or 'groq'.")
     
-    def generate_response(self, prompt, max_tokens=4096, temperature=0.7, **kwargs):
+    def reset_conversation(self):
+        """Reset the conversation history"""
+        self.conversation_history = []
+    
+    def generate_response(self, prompt, max_tokens=4096, temperature=0.7, continue_conversation=False, **kwargs):
         """
         Generate a response using the configured API.
         
@@ -53,15 +58,22 @@ class Generator:
             prompt (str): The prompt to send to the API
             max_tokens (int): Maximum number of tokens to generate
             temperature (float): Temperature for response generation
+            continue_conversation (bool): Whether to continue previous conversation
             **kwargs: Additional parameters specific to the API
             
         Returns:
             str: The generated response
         """
+        # Build message history
+        messages = []
+        if continue_conversation:
+            messages.extend(self.conversation_history)
+        messages.append({"role": "user", "content": prompt})
+        
         # Common parameters for both APIs
         params = {
             "model": self.model_name,
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": messages,
             "temperature": temperature,
             "stream": self.stream
         }
@@ -74,7 +86,6 @@ class Generator:
             # Default Groq parameters that can be overridden
             params.setdefault("top_p", 0.95)
 
-        
         # Add any additional parameters
         params.update(kwargs)
         
@@ -89,10 +100,21 @@ class Generator:
                     content = chunk.choices[0].delta.content
                     print(content, end="", flush=True)
                     full_response += content
+            
+            # Update conversation history
+            if continue_conversation:
+                self.conversation_history.append({"role": "user", "content": prompt})
+                self.conversation_history.append({"role": "assistant", "content": full_response})
+                
             return full_response
             
-        # Extract and return the generated text
-        return response.choices[0].message.content
+        # Extract response and update history
+        response_content = response.choices[0].message.content
+        if continue_conversation:
+            self.conversation_history.append({"role": "user", "content": prompt})
+            self.conversation_history.append({"role": "assistant", "content": response_content})
+            
+        return response_content
 
 
 class SceneScriptor(Generator):
@@ -103,18 +125,19 @@ class SceneScriptor(Generator):
         super().__init__(model_name, api_key, api_type, base_url, stream)
         self.prompt_template = scene_script_prompt_template
 
-    def __call__(self, user_prompt):
+    def __call__(self, user_prompt, continue_conversation=False):
         """
         Generate a scene script based on the user prompt.
         
         Args:
             user_prompt (str): The user's prompt describing the concept to visualize
+            continue_conversation (bool): Whether to continue previous conversation
             
         Returns:
             str: The generated scene script
         """
         prompt = self.prompt_template.format(user_prompt)
-        response = self.generate_response(prompt)
+        response = self.generate_response(prompt, continue_conversation=continue_conversation)
         return response
 
 
@@ -129,20 +152,45 @@ class ManimCoder(Generator):
         # Select the appropriate prompt template
         self.prompt_template = manim_code_prompt_template
 
-    def __call__(self, scene_script, user_prompt):
+    def __call__(self, scene_script, user_prompt, continue_conversation=False):
         """
         Generate Manim code based on the scene script and user prompt.
         
         Args:
             scene_script (str): The scene script to convert to code
-            user_prompt (str): The original user prompt
+            user_prompt (str): The original user prompt or error message
+            continue_conversation (bool): Whether to continue previous conversation
             
         Returns:
             str: The generated Manim code
         """
-        prompt = self.prompt_template.format(user_prompt=user_prompt, scene_script=scene_script)
-        response = self.generate_response(prompt)
+        # If this is the first message in the conversation, use the full prompt template
+        if not continue_conversation or not self.conversation_history:
+            prompt = self.prompt_template.format(user_prompt=user_prompt, scene_script=scene_script)
+        else:
+            # For follow-up messages (like error corrections), just send the error directly
+            prompt = user_prompt
+            
+        # Use higher max_tokens and lower temperature for code generation
+        response = self.generate_response(
+            prompt, 
+            temperature=0.6,
+            continue_conversation=continue_conversation
+        )
         return response
+        
+    def fix_code_with_error(self, error_message):
+        """
+        Send an error message to the model to fix previously generated code.
+        
+        Args:
+            error_message (str): The error message from code execution
+            
+        Returns:
+            str: The fixed Manim code
+        """
+        prompt = f"The code you generated produced the following error:\n\n```\n{error_message}\n```\n\nPlease fix the code and provide the complete corrected version."
+        return self.__call__(None, prompt, continue_conversation=True)
 
 
 class ManimCritic(Generator):
@@ -167,20 +215,26 @@ class ManimCritic(Generator):
             image_b64 = base64.b64encode(f.read()).decode()
         return image_b64
     
-    def generate_response_with_image(self, prompt, image_data):
+    def generate_response_with_image(self, prompt, image_data, continue_conversation=False):
         """
         Generate a response based on text prompt and image data.
         
         Args:
             prompt (str): The text prompt
             image_data (str): Base64-encoded image data
+            continue_conversation (bool): Whether to continue previous conversation
             
         Returns:
             str: The generated response
         """
         # Format messages with image for vision models
-        messages = [
-            {"role": "user", "content": [
+        messages = []
+        if continue_conversation:
+            messages.extend(self.conversation_history)
+            
+        messages.append({
+            "role": "user", 
+            "content": [
                 {"type": "text", "text": prompt},
                 {
                     "type": "image_url",
@@ -188,8 +242,8 @@ class ManimCritic(Generator):
                         "url": f"data:image/png;base64,{image_data}"
                     }
                 }
-            ]}
-        ]
+            ]
+        })
         
         # Common parameters
         params = {
@@ -217,19 +271,35 @@ class ManimCritic(Generator):
                         content = chunk.choices[0].delta.content
                         print(content, end="", flush=True)
                         full_response += content
+                        
+                # Update conversation history
+                if continue_conversation:
+                    self.conversation_history.append(messages[-1])  # Add user message with image
+                    self.conversation_history.append({"role": "assistant", "content": full_response})
+                    
                 return full_response
             except Exception as e:
                 print(f"Error during streaming: {str(e)}")
                 return None
 
-        return response.choices[0].message.content
+        # Update conversation history for non-streaming response
+        response_content = response.choices[0].message.content
+        if continue_conversation:
+            self.conversation_history.append(messages[-1])  # Add user message with image
+            self.conversation_history.append({"role": "assistant", "content": response_content})
+            
+        return response_content
 
-    def __call__(self, image_path, user_prompt, scene_script, manim_code):
+    def __call__(self, image_path, user_prompt, scene_script, manim_code, continue_conversation=False):
         """
         Generate a critique of a Manim animation frame.
         
         Args:
             image_path (str): Path to the image file
+            user_prompt (str): The original user prompt
+            scene_script (str): The scene script
+            manim_code (str): The Manim code
+            continue_conversation (bool): Whether to continue previous conversation
             
         Returns:
             str: The generated critique
@@ -238,7 +308,7 @@ class ManimCritic(Generator):
         prompt = critic_prompt_template.format(user_prompt=user_prompt,
                                             scene_script=scene_script, 
                                             manim_code=manim_code)
-        return self.generate_response_with_image(prompt, image_data)
+        return self.generate_response_with_image(prompt, image_data, continue_conversation)
 
 
 def main():
@@ -294,6 +364,7 @@ def main():
     
     # Step 3: Critique an image (assuming it exists)
     print("Generating critique...")
+    # just loading a random image to test the critic
     image_feedback = critic(r"media\images\test\DerivativeGeometricIntuition0009.png",
                             user_prompt,
                             scene_script,
