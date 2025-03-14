@@ -20,7 +20,7 @@ def run_pipeline(user_prompt):
     """
     Runs the full pipeline to generate and validate Manim animations.
     
-    The pipeline maintains conversation history with each model, allowing for
+    The pipeline maintains conversation history with the ManimCoder to enable
     iterative improvements and error corrections without losing context.
     
     Args:
@@ -42,13 +42,17 @@ def run_pipeline(user_prompt):
         stream=True
     )
     
+    # Only enable history saving for ManimCoder
+    # deepseek/deepseek-r1-distill-llama-70b:free
+    # google/gemini-2.0-pro-exp-02-05:free BEST
     manim_coder = ManimCoder(
-        model_name="google/gemma-3-27b-it:free",
+        model_name="google/gemini-2.0-pro-exp-02-05:free",
         api_key=openrouter_api_key,
         api_type="openai",
         base_url="https://openrouter.ai/api/v1",
         voiceover=False,
-        stream=True
+        stream=True,
+        save_history=True  # Enable conversation history
     )
     
     critic = ManimCritic(
@@ -71,7 +75,7 @@ def run_pipeline(user_prompt):
     max_iterations = 5
     done = False
     code_iterations = 0
-    max_code_iterations = 3
+    max_code_iterations = 5
 
     while not done and iteration < max_iterations:
         iteration += 1
@@ -79,12 +83,12 @@ def run_pipeline(user_prompt):
 
         # Reset code iterations for each new scene script
         code_iterations = 0
-        manim_coder.reset_conversation()  # Reset conversation for new scene script
+        manim_coder.clear_history()  # Clear conversation history for new scene script
         
         # Generate Manim code
         print("\nGenerating Manim code...")
-        response = manim_coder(scene_script, user_prompt, continue_conversation=True)
-        manim_code = extract_code(response)
+        manim_code = manim_coder(scene_script=scene_script, user_prompt=user_prompt)
+        manim_code = extract_code(manim_code)
         print("\nManim code generated.")
 
         # Try to fix code if it has errors, up to max_code_iterations
@@ -105,50 +109,31 @@ def run_pipeline(user_prompt):
             if code_iterations >= max_code_iterations:
                 print("\nReached maximum code fix attempts. Moving to a new scene script.")
                 break
+
+            # Debug conversation history
+            print("\nDebugging conversation history before error fix:")
+            manim_coder.debug_conversation_history()
                 
             print("\nSending error back to ManimCoder for fixing...")
-            response = manim_coder.fix_code_with_error(details['error'])
-            manim_code = extract_code(response)
+            error_message = details['error']
+            manim_code = manim_coder(error_message=error_message, save_history=True)
+            manim_code = extract_code(manim_code)
+            
             print("\nFixed code generated.")
 
         # If we couldn't fix the code after max attempts, get a new scene script
         if not success:
             print("\nGenerating a new scene script with error context...")
             error_context = f"The previous scene script led to code that couldn't be fixed after {max_code_iterations} attempts. The error was: {details['error']}"
-            scene_script = scene_scriptor(f"{error_context}\n\nPlease create a simpler scene script for: {user_prompt}", continue_conversation=True)
+            scene_script = scene_scriptor(f"{error_context}\n\nPlease create a simpler scene script for: {user_prompt}")
             print("\nNew scene script generated.")
             continue
 
-        # Get generated images
-        print("\nLooking for generated images...")
-        image_files = glob("media/images/*/*.png")
-        
-        if not image_files:
-            print("No images were generated. Retrying with a new scene script...")
-            scene_script = scene_scriptor(f"The previous scene script didn't produce any images. Please create a simpler scene script for: {user_prompt}", continue_conversation=True)
-            continue
+        if success:
+            print("done.")
+            break
 
-        # Have critic evaluate each image
-        print("\nCritiquing generated images...")
-        critic.reset_conversation()  # Reset conversation for new images
-        
-        for image_path in image_files:
-            critique = critic(image_path, user_prompt, scene_script, manim_code)
-            
-            # Check if the critic approved the animation
-            if critique.startswith("Approved"):
-                print("\nCritic approved the animation!")
-                print(f"Approval message: {critique}")
-                done = True
-                break
-            
-            print("\nCritic suggested improvements. Updating scene script...")
-            scene_script = scene_scriptor(f"Update this scene script based on the following critique: {critique}\nOriginal script: {scene_script}", continue_conversation=True)
-
-    if not done:
-        print("\nMaximum iterations reached without critic approval.")
-    
-    return done
+        # IMPLEMENT LATER
 
 if __name__ == "__main__":
     user_prompt = "Explain the concept of derivatives using geometric intuition"

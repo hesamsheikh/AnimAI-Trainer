@@ -7,7 +7,8 @@ import ast
 import sys
 import functools
 import traceback
-
+import os
+import subprocess
 
 def add_necessary_imports(code_string):
     """
@@ -16,6 +17,9 @@ def add_necessary_imports(code_string):
     required_imports = [
         "from manim import *",
         "import numpy as np",
+        "import os",
+        "import sys",
+        "sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))",
         "from utils.bounding_box import create_bounding_box, check_mobject_overlaps"
     ]
     
@@ -97,10 +101,10 @@ def remove_wait_calls(code_string):
 def get_tempconfig_settings():
     """Returns the default tempconfig settings as a dictionary"""
     return {
-        "quality": "medium_quality",
-        "frame_rate": 1,
+        "quality": "high_quality",
+        "frame_rate": 30,
         "preview": False,
-        "format": "png",
+        "format": "mp4",
         "disable_caching": False,
         "write_to_movie": True,
         "save_last_frame": False,
@@ -195,133 +199,12 @@ def process_manim_code(code_string):
         str: Processed Manim code string
     """
     code_string = add_necessary_imports(code_string)
-    code_string = remove_wait_calls(code_string)
-    code_string = inject_overlap_check(code_string)
+    # code_string = remove_wait_calls(code_string)
+    # code_string = inject_overlap_check(code_string)
     code_string = add_tempconfig(code_string)
     if not code_string: return False
-    code_string = add_result_return(code_string)
+    # code_string = add_result_return(code_string)
     return code_string
-
-def run_manim_code(code_string, save_code_py=False):
-    """
-    Executes a string containing Manim code.
-    
-    Args:
-        code_string (str): A string containing valid Manim Python code.
-        save_code_py (bool): If True, saves the processed code to a Python file in the temp folder.
-            Defaults to False.
-        
-    Returns:
-        tuple: (success, output, error) where:
-            - success (bool): True if execution was successful, False otherwise
-            - output (str): Standard output captured during execution
-            - error (str): Error message if execution failed, empty string otherwise
-    """
-    # Save original stdout and stderr
-    original_stdout = sys.stdout
-    original_stderr = sys.stderr
-    
-    # Create string buffers to capture output
-    stdout_buffer = StringIO()
-    stderr_buffer = StringIO()
-    
-    # Redirect stdout and stderr
-    sys.stdout = stdout_buffer
-    sys.stderr = stderr_buffer
-    
-    success = True
-    
-    try:
-        # Process the code string
-        code_string = process_manim_code(code_string)
-        if not code_string: return False, "", "manim code processing failed, code likely has errors", None
-        
-        # Save processed code if requested
-        if save_code_py:
-            import os
-            
-            # Create temp directory if it doesn't exist
-            temp_dir = 'temp'
-            os.makedirs(temp_dir, exist_ok=True)
-            
-            # Save code to file with UTF-8 encoding
-            temp_file = os.path.join(temp_dir, 'manim_scene.py')
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                f.write(code_string)
-        
-        # Create a dictionary that will be used to return values
-        globals_dict = {'return_dict': {}}
-
-        # Compile the code to catch syntax errors
-        compiled_code = compile(code_string, '<string>', 'exec')
-        
-        # Execute the code
-        exec(compiled_code, globals_dict)
-        
-    except SyntaxError as e:
-        # For syntax errors, format a clear error message with line number
-        error_class = e.__class__.__name__
-        line_number = e.lineno
-        error_message = str(e)
-        
-        # Format the error message with line information
-        full_error = f"{error_class} at line {line_number}: {error_message}\n"
-        
-        # Add the problematic line if available
-        if hasattr(e, 'text') and e.text:
-            full_error += f"Line content: {e.text.strip()}\n"
-            if hasattr(e, 'offset') and e.offset:
-                # Add a pointer to the error position
-                full_error += " " * (e.offset - 1) + "^\n"
-        
-        return False, {'error': full_error, 'error_type': 'syntax'}
-        
-    except Exception as e:
-        # For runtime errors, capture the full traceback
-        error_class = e.__class__.__name__
-        
-        # Capture the full traceback
-        exc_type, exc_value, exc_traceback = sys.exc_info()
-        
-        # Format the traceback into a string
-        tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
-        full_traceback = ''.join(tb_lines)
-        
-        # Create a more readable error message
-        error_message = str(e)
-        full_error = f"{error_class}: {error_message}\n\nFull traceback:\n{full_traceback}"
-        
-        return False, {'error': full_error, 'error_type': 'runtime'}
-    
-    finally:
-        # Get the output
-        output = stdout_buffer.getvalue()
-        log = stderr_buffer.getvalue()
-
-        # Get the result from the return dictionary
-        overlap_result = globals_dict['return_dict'].get('result')
-        line_number = globals_dict['return_dict'].get('line_number')
-
-        # Get the last two lines before the overlap line number
-        if line_number:
-            code_lines = code_string.split('\n')
-            context_lines = code_lines[max(0, line_number-2):line_number]
-
-        # Restore original stdout and stderr
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-        
-        # Close the buffers
-        stdout_buffer.close()
-        stderr_buffer.close()
-
-    return success, {
-        'output': output,
-        'log': log,
-        'overlap_result': overlap_result,
-        'line_number': line_number,
-        'context_lines': context_lines
-    }
 
 # Quick pre-checks before running expensive Manim validation
 def quick_syntax_check(code_string):
@@ -342,25 +225,97 @@ def quick_syntax_check(code_string):
     return True, ""
 
 # @functools.lru_cache(maxsize=256)
-def eval_manim_code(code_string, save_code_py=False):
+def eval_manim_code(code_string, save_code_py=True):
     """
-    Verifies the syntax and renderability of Manim code by running it
+    Evaluates Manim code and returns success status and details.
     
     Args:
-        code_string (str): The Manim code to verify
+        code_string (str): The Manim code to evaluate
+        save_code_py (bool): Whether to save the code to a file
         
     Returns:
-        tuple: (is_valid, error_message) where:
-            - is_valid (bool): True if the code passes all checks, False otherwise
-            - error_message (str): Description of any errors found, empty if is_valid is True
+        tuple: (success, details) where success is a boolean and details is a dictionary
     """
-
-    # Run quick checks first to avoid expensive processing for obvious errors
-    quick_valid, quick_error = quick_syntax_check(code_string)
-    if not quick_valid:
-        return False, {"error": quick_error, "result": None}
-
-    # Run the code through code_utils
-    success, details = run_manim_code(code_string, save_code_py=save_code_py)
+    try:
+        # Process the code string
+        code_string = process_manim_code(code_string)
+        if not code_string: 
+            return False, {'error': "Manim code processing failed, code likely has errors", 'error_type': 'processing'}
+        
+        # Save processed code
+        if save_code_py:
+            temp_dir = 'temp'
+            os.makedirs(temp_dir, exist_ok=True)
+            temp_file = os.path.join(temp_dir, 'manim_scene.py')
+            
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                f.write(code_string)
+        
+        # First, try to compile the code to catch syntax errors
+        try:
+            compiled_code = compile(code_string, '<string>', 'exec')
+        except SyntaxError as e:
+            # For syntax errors, format a clear error message with line number
+            error_class = e.__class__.__name__
+            line_number = e.lineno
+            error_message = str(e)
+            
+            # Format the error message with line information
+            full_error = f"{error_class} at line {line_number}: {error_message}\n"
+            
+            # Add the problematic line if available
+            if hasattr(e, 'text') and e.text:
+                full_error += f"Line content: {e.text.strip()}\n"
+                if hasattr(e, 'offset') and e.offset:
+                    # Add a pointer to the error position
+                    full_error += " " * (e.offset - 1) + "^\n"
+            
+            return False, {'error': full_error, 'error_type': 'syntax'}
+        
+        # If compilation succeeded, run the file as a subprocess to get detailed error output
+        try:
+            # Run the Python file as a subprocess
+            result = subprocess.run(
+                [sys.executable, temp_file],
+                capture_output=True,
+                text=True,
+                timeout=30  # Set a timeout to prevent hanging
+            )
+            
+            # Check if there was an error
+            if result.returncode != 0:
+                # Get the error output
+                error_output = result.stderr
+                
+                # Extract the relevant part of the error message
+                # This will include the code snippet with the pointer
+                return False, {'error': error_output, 'error_type': 'runtime', 'stdout': result.stdout}
+            
+            # If we get here, execution was successful
+            return True, {'message': 'Code executed successfully', 'stdout': result.stdout}
+            
+        except subprocess.TimeoutExpired:
+            return False, {'error': "Code execution timed out after 30 seconds", 'error_type': 'timeout'}
+        except Exception as e:
+            # Fallback to the in-process execution if subprocess fails
+            globals_dict = {'return_dict': {}}
+            
+            try:
+                # Execute the code
+                exec(compiled_code, globals_dict)
+                return True, {'message': 'Code executed successfully'}
+            except Exception as e:
+                # Capture the full traceback
+                exc_type, exc_value, exc_traceback = sys.exc_info()
+                tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
+                full_traceback = ''.join(tb_lines)
+                
+                error_class = e.__class__.__name__
+                error_message = str(e)
+                full_error = f"{error_class}: {error_message}\n\nFull traceback:\n{full_traceback}"
+                
+                return False, {'error': full_error, 'error_type': 'runtime'}
     
-    return success, details
+    except Exception as e:
+        # Handle any unexpected errors in our evaluation code
+        return False, {'error': f"Error evaluating code: {str(e)}", 'error_type': 'evaluation'}
